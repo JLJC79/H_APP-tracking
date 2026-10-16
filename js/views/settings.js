@@ -52,10 +52,10 @@ export async function render(el) {
     </section>
 
     <section class="card">
-      <h2>OneDrive sync</h2>
-      <p class="muted">Optional. Imports wearable CSVs and lab result files that you or Cowork put in the app's own OneDrive folder,
-        <em>Apps/Health Dashboard</em>. The app can only see that folder, nothing else in your OneDrive. Lab results are shown to you before they are saved.
-        See the README for the one-time setup.</p>
+      <h2>OneDrive sync (advanced)</h2>
+      <p class="muted">Not needed to use OneDrive: the import screens can open files from OneDrive directly (Browse → OneDrive).
+        This optional one-tap sync reads the app's own OneDrive folder, <em>Apps/Health Dashboard</em>, and nothing else. It needs a Microsoft
+        app registration, which for a personal account requires an Azure account. See the README.</p>
       ${odConnected
         ? `<p class="badge badge-ok">Connected</p>
            <div class="row"><a class="btn btn-primary grow" href="#/sync">Sync now</a><button class="btn grow" id="od-signout">Disconnect</button></div>`

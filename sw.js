@@ -15,6 +15,7 @@ const ASSETS = [
   './js/chart.js',
   './js/csv.js',
   './js/presets.js',
+  './js/labfiles.js',
   './js/onedrive.js',
   './js/backup.js',
   './js/pin.js',

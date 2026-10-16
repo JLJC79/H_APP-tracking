@@ -1,27 +1,40 @@
 # Cowork instructions: feeding the Health Dashboard
 
 Add the text in the box below to the Cowork task that sorts your medical inbox. It tells Cowork to
-copy wearable exports and write lab result files into the app's OneDrive folder. The app then
-picks them up when you tap **Sync**.
-
-The app's folder only exists after you have connected OneDrive in the app and synced once
-(Settings → OneDrive sync → Connect, then Sync now). On a PC with OneDrive it is at:
+copy the useful wearable files and write lab result files into one folder in your OneDrive:
 
 ```
-C:\Users\jleec\OneDrive\Apps\Health Dashboard\
+C:\Users\jleec\OneDrive\Personal\MEDICAL\_dashboard-inbox\
+    wearables\
+    labs\
 ```
+
+On the phone you then open those files from the app:
+
+- **Wearables → Import CSV → Browse → OneDrive →** Personal → MEDICAL → _dashboard-inbox → wearables,
+  and select the new files.
+- **Labs → Import → Browse → OneDrive →** … → _dashboard-inbox → labs, pick the new file(s), check
+  the results on the review screen and tap **Save ticked**.
+
+The app remembers which file names it has imported and says so in the summary, so you can tell new
+files from old ones. Importing a file twice is harmless.
+
+(If you later set up the optional one-tap OneDrive sync, see the README; it uses the app's own
+folder `OneDrive\Apps\Health Dashboard\inbox\` instead, with the same `wearables` and `labs`
+subfolders.)
 
 ---
 
 ```text
 HEALTH DASHBOARD HAND-OFF (run after filing new items)
 
-App inbox folders:
-  WEARABLES = C:\Users\jleec\OneDrive\Apps\Health Dashboard\inbox\wearables\
-  LABS      = C:\Users\jleec\OneDrive\Apps\Health Dashboard\inbox\labs\
+Dashboard inbox folders (create them if missing):
+  WEARABLES = C:\Users\jleec\OneDrive\Personal\MEDICAL\_dashboard-inbox\wearables\
+  LABS      = C:\Users\jleec\OneDrive\Personal\MEDICAL\_dashboard-inbox\labs\
 Only ever write into these two folders. Never copy anything else there.
 Keep a record of what you have handed off in MEDICAL\_system\data\dashboard-handoff.txt
 (one line per file: date, source path, file written) and never hand off the same source twice.
+Files in WEARABLES and LABS are copies: delete any that are more than 60 days old.
 
 1. WEARABLE EXPORTS
 When a new folder appears in MEDICAL\09_Wearable-Data:
@@ -73,11 +86,7 @@ Rules:
 
 ## Notes
 
-- **Why copy rather than point the app at MEDICAL?** The app is only allowed to see its own
-  folder (`Apps/Health Dashboard`). It can't read `MEDICAL` or anything else in your OneDrive.
-- **Withings files** don't have built-in mappings yet. The first time each one arrives, the app
-  asks you to map its columns once (Sync → Map them now); after that they import automatically.
-- **Duplicates are safe.** Re-importing a wearable file updates the same days. A lab file whose
-  results are already saved shows them as *Already saved* and unticked.
-- After a successful sync the app moves each file from `inbox` to `done`, with the date added to
-  the name. You can delete files in `done` at any time.
+- **Withings files** don't have built-in mappings yet. The first time each kind arrives, the app
+  asks you to map its columns once; after that it imports automatically.
+- **Duplicates are safe.** Re-importing a wearable file updates the same days. In a lab file,
+  results already in the app are shown as *Already saved* and unticked.

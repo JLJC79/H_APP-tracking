@@ -6,16 +6,18 @@ import {
   parseCSV, parseDate, DATE_FORMATS, guessDateFormat, headerSignature, guessColumn, applyMapping,
   detectHeaderRow, cleanHeader, isBookkeepingColumn,
 } from '../csv.js';
+import { resolvePreset } from '../presets.js';
 import {
   esc, uid, fmtDate, fmtNum, groupBy, byDate, segControl, rangeStart, inRange, mean,
   readFileText, toast, prettyName,
 } from '../util.js';
 
 let range = '6m';
-let imp = null; // { queue: File[], results: [], current: { fileName, rows, headerRow } | null }
+let imp = null; // { queue: File[], results: [], current: { fileName, rows, headerRow, mapping } | null, pendingStart }
 
 export async function render(el, params) {
   if (params[0] === 'import') {
+    if (imp && imp.pendingStart) { imp.pendingStart = false; return processQueue(el); }
     if (imp && !imp.current) resetImport(); // don't show a stale summary when coming back
     return renderImport(el);
   }
@@ -153,28 +155,56 @@ function resultFor(fileName, result, how) {
   };
 }
 
+/** Saved mapping for these rows, else a built-in preset for this file name, else none. */
+async function autoMapping(fileName, rows) {
+  const mappings = await getSetting('csvMappings', []);
+  const detected = detectHeaderRow(rows);
+  const found = findSavedMapping(rows, mappings, detected);
+  if (found) return { ...found, how: `saved mapping “${found.mapping.name}”` };
+  const preset = resolvePreset(fileName, rows[detected]);
+  if (preset) return { mapping: preset, headerRow: detected, how: `built-in mapping: ${preset.name}` };
+  return { mapping: null, headerRow: detected };
+}
+
+/**
+ * Imports a CSV's text if a saved or built-in mapping fits (and auto is on).
+ * Returns { imported } with a summary entry, { error }, or { rows, headerRow, mapping } when the
+ * mapping form is needed. Also used by OneDrive sync.
+ */
+export async function importCsvText(fileName, text, { auto = true } = {}) {
+  let rows;
+  try { rows = parseCSV(text); } catch { rows = []; }
+  if (rows.length < 2) return { error: 'No data rows found.' };
+  const m = await autoMapping(fileName, rows);
+  if (m.mapping && auto) {
+    const result = applyMapping(rows[m.headerRow], rows.slice(m.headerRow + 1), m.mapping);
+    // A mapping that reads nothing (e.g. an empty export) falls through to the form.
+    if (result.records.length) {
+      await saveRecords(result, fileName);
+      return { imported: resultFor(fileName, result, m.how) };
+    }
+  }
+  return { rows, headerRow: m.headerRow, mapping: m.mapping };
+}
+
+/** Queues files (File objects) for the importer and opens it. Used by OneDrive sync. */
+export function queueFilesForImport(files) {
+  resetImport();
+  imp.queue = files;
+  imp.pendingStart = true;
+}
+
 /** Works through the queue until a file needs the mapping form, or the queue is empty. */
 async function processQueue(el) {
-  const mappings = await getSetting('csvMappings', []);
   const auto = await getSetting('csvAutoImport', true);
   while (imp.queue.length) {
     const file = imp.queue.shift();
-    let rows;
-    try { rows = parseCSV(await readFileText(file)); } catch { rows = []; }
-    if (rows.length < 2) { imp.results.push({ fileName: file.name, error: 'No data rows found.' }); continue; }
-    const detected = detectHeaderRow(rows);
-    const found = findSavedMapping(rows, mappings, detected);
-    if (found && auto) {
-      const headers = rows[found.headerRow];
-      const result = applyMapping(headers, rows.slice(found.headerRow + 1), found.mapping);
-      if (result.records.length) {
-        await saveRecords(result, file.name);
-        imp.results.push(resultFor(file.name, result, `saved mapping “${found.mapping.name}”`));
-        continue;
-      }
-      // Saved mapping read nothing (e.g. an empty export): let the person look at it.
-    }
-    imp.current = { fileName: file.name, rows, headerRow: found ? found.headerRow : detected };
+    let text;
+    try { text = await readFileText(file); } catch { text = ''; }
+    const r = await importCsvText(file.name, text, { auto });
+    if (r.error) { imp.results.push({ fileName: file.name, error: r.error }); continue; }
+    if (r.imported) { imp.results.push(r.imported); continue; }
+    imp.current = { fileName: file.name, rows: r.rows, headerRow: r.headerRow, mapping: r.mapping };
     return renderImport(el);
   }
   imp.current = null;
@@ -242,7 +272,8 @@ async function renderMapping(el) {
   const shown = headers.map((h, i) => cleanHeader(h) || `Column ${i + 1}`);
   const sig = headerSignature(headers);
   const saved = mappings.find((m) => m.signature === sig);
-  const m = saved || guessMapping(headers, data);
+  const preset = !saved && imp.current.mapping && imp.current.mapping.preset ? imp.current.mapping : null;
+  const m = saved || preset || guessMapping(headers, data);
   const opts = (sel) => shown.map((h, i) => `<option value="${i}"${i === sel ? ' selected' : ''}>${esc(h)}</option>`).join('');
   const preview = data.slice(0, 5);
   const left = imp.queue.length;
@@ -256,6 +287,9 @@ async function renderMapping(el) {
         <button class="btn btn-sm" id="skip-file">${left ? 'Skip this file' : 'Cancel'}</button></div>
       <p class="muted">${esc(fileName)} · ${data.length} data rows${left ? ` · ${left} more file${left === 1 ? '' : 's'} after this` : ''}</p>
       ${saved ? `<p class="badge badge-ok">Using saved mapping “${esc(saved.name)}”</p>` : ''}
+      ${preset ? `<p class="badge badge-ok">Using built-in mapping: ${esc(preset.name)}</p>` : ''}
+      ${m.filter ? `<p class="hint">Only rows where ${esc(shown[m.filter.col])} is ${esc(m.filter.values.join(' or '))} are read.</p>` : ''}
+      ${m.scale && Object.keys(m.scale).length ? `<p class="hint">Unit conversion: ${Object.entries(m.scale).map(([c, f]) => `${esc(shown[c])} × ${fmtNum(f, 4)}`).join(', ')}.</p>` : ''}
       <div class="field"><label for="m-hrow">Column names are on</label>
         <select id="m-hrow">${rowChoices}</select>
         <p class="hint">Some apps put a line of information above the column names. Pick the row that holds them.</p></div>
@@ -316,6 +350,10 @@ async function renderMapping(el) {
     return {
       id: saved ? saved.id : uid(),
       name: form.mapName.value.trim() || fileName,
+      // Kept from a saved or built-in mapping; not editable in the form.
+      filter: m.filter || null,
+      scale: m.scale || {},
+      aggs: m.aggs || {},
       signature: sig,
       headerRow,
       format: form.format.value,
@@ -360,6 +398,7 @@ async function renderMapping(el) {
   sync();
   el.querySelector('#m-hrow').addEventListener('change', async (e) => {
     imp.current.headerRow = +e.target.value;
+    imp.current.mapping = null; // column positions changed
     await renderMapping(el);
   });
   el.querySelector('#check').addEventListener('click', check);
@@ -380,7 +419,7 @@ async function renderMapping(el) {
       list.push(cur);
       await setSetting('csvMappings', list);
     }
-    imp.results.push(resultFor(fileName, result, saved ? `mapping “${cur.name}”` : 'new mapping'));
+    imp.results.push(resultFor(fileName, result, saved ? `mapping “${cur.name}”` : preset ? `built-in mapping: ${preset.name}` : 'new mapping'));
     imp.current = null;
     await processQueue(el);
   });

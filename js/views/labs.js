@@ -1,10 +1,11 @@
 // Lab results: grouped list with flags, per-test trend chart, add/edit form.
-// Routes: #/labs · #/labs/test/<name> · #/labs/new[/<name>] · #/labs/edit/<id> · #/labs/visit
+// Routes: #/labs · #/labs/test/<name> · #/labs/new[/<name>] · #/labs/edit/<id> · #/labs/visit · #/labs/import
 import { getAll, get, put, putMany, remove } from '../db.js';
 import { lineChart, dataTable } from '../chart.js';
+import { prepareLabFile, labFileCard, saveTicked } from '../labfiles.js';
 import {
   esc, uid, todayISO, fmtDate, fmtNum, toNum, rangeStatus, statusBadge, rangeText,
-  groupBy, byDate, segControl, rangeStart, inRange, isValidISODate, toast,
+  groupBy, byDate, segControl, rangeStart, inRange, isValidISODate, toast, readFileText,
 } from '../util.js';
 
 let detailRange = 'all';
@@ -25,6 +26,7 @@ export async function render(el, params) {
   if (mode === 'test') return renderDetail(el, arg);
   if (mode === 'new') return renderForm(el, null, arg);
   if (mode === 'visit') return renderVisit(el);
+  if (mode === 'import') return renderLabImport(el);
   if (mode === 'edit') return renderForm(el, await get('labs', arg));
   return renderList(el);
 }
@@ -44,7 +46,8 @@ async function renderList(el) {
       <p>Add results by hand, or import a backup file in Settings.</p>
       <div class="row" style="justify-content:center">
         <a class="btn btn-primary" href="#/labs/visit">Add a visit</a>
-        <a class="btn" href="#/labs/new">Add one result</a></div></div>`;
+        <a class="btn" href="#/labs/new">Add one result</a>
+        <a class="btn" href="#/labs/import">Import lab file</a></div></div>`;
     return;
   }
 
@@ -53,6 +56,7 @@ async function renderList(el) {
       <p class="grow" style="margin:0">${groups.length} test${groups.length === 1 ? '' : 's'} ·
         ${flagged.length ? `<strong class="error" style="display:inline">${flagged.length} out of range</strong> (latest)` : 'all latest results in range'}</p>
       <a class="btn" href="#/labs/new">+ Add</a>
+      <a class="btn" href="#/labs/import">Import</a>
       <a class="btn btn-primary" href="#/labs/visit">+ Visit</a>
     </div>
     <div class="field"><label for="lab-filter">Filter tests</label>
@@ -319,5 +323,51 @@ async function renderVisit(el) {
     await putMany('labs', recs);
     toast(`Saved ${recs.length} result${recs.length === 1 ? '' : 's'}`);
     location.hash = '#/labs';
+  });
+}
+
+// ---- Import lab results files (e.g. written by Cowork), reviewed before saving ----
+
+async function renderLabImport(el) {
+  el.innerHTML = `
+    <p><a href="#/labs">← All lab results</a></p>
+    <div class="card">
+      <h2>Import lab results file</h2>
+      <p>Choose one or more lab results files (<em>.json</em>, for example the ones Cowork writes from your pathology reports).
+        On Android, tap <strong>Browse</strong> and pick <strong>OneDrive</strong> to open them straight from your OneDrive.
+        Nothing is saved until you review each file.</p>
+      <div class="field"><label for="lab-files">Lab results files</label>
+        <input id="lab-files" type="file" multiple accept=".json,application/json"></div>
+      <p class="error" id="lab-file-error" role="alert"></p>
+    </div>
+    <div id="reviews"></div>`;
+  const reviews = el.querySelector('#reviews');
+  let files = [];
+  const draw = () => {
+    reviews.innerHTML = files.map((f, i) => (f ? labFileCard(f, i) : '')).join('');
+    if (files.length && files.every((f) => !f)) reviews.innerHTML = '<div class="card"><p>All files done.</p><a class="btn btn-primary" href="#/labs">View lab results</a></div>';
+    reviews.querySelectorAll('[data-save]').forEach((b) => b.addEventListener('click', async () => {
+      const i = +b.dataset.save;
+      b.disabled = true;
+      const n = await saveTicked(b.closest('.card'), files[i]);
+      toast(`Saved ${n} result${n === 1 ? '' : 's'}`);
+      files[i] = null;
+      draw();
+    }));
+    reviews.querySelectorAll('[data-later]').forEach((b) => b.addEventListener('click', () => {
+      files[+b.dataset.later] = null;
+      draw();
+    }));
+  };
+  el.querySelector('#lab-files').addEventListener('change', async (e) => {
+    const err = el.querySelector('#lab-file-error');
+    const problems = [];
+    files = [];
+    for (const file of e.target.files) {
+      try { files.push(await prepareLabFile(file.name, await readFileText(file))); }
+      catch (ex) { problems.push(`${file.name}: ${ex.message}`); }
+    }
+    err.textContent = problems.join(' · ');
+    draw();
   });
 }

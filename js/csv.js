@@ -153,8 +153,12 @@ export function isBookkeepingColumn(name) {
 /**
  * Applies a mapping to data rows (header excluded).
  * mapping: { format: 'long'|'wide', dateCol, metricCol, valueCol, valueCols, names, dateFormat, utc,
- *            agg: 'auto'|'mean'|'sum'|'last' }
+ *            agg: 'auto'|'mean'|'sum'|'last'|'max' }
  * names (wide only, optional): { [columnIndex]: metric name to save as } — defaults to the cleaned header.
+ * aggs (wide only, optional): { [columnIndex]: agg } — overrides `agg` for that column.
+ * scale (wide only, optional): { [columnIndex]: factor } — e.g. 1/60 to turn minutes into hours.
+ * filter (optional): { col, values } — only rows whose column `col` is one of `values` are read
+ *   (e.g. Samsung's daily step file has one row per device plus a combined total).
  * Returns { records: [{metric, date, value}], skipped, total }.
  */
 export function metricNameFor(headers, mapping, c) {
@@ -164,13 +168,16 @@ export function metricNameFor(headers, mapping, c) {
 
 export function applyMapping(headers, rows, mapping) {
   const buckets = new Map(); // "metric|date" -> values[]
+  const aggFor = new Map(); // metric -> per-column agg override
   let skipped = 0, total = 0;
   const add = (metric, date, value) => {
     const k = `${metric}|${date}`;
     if (!buckets.has(k)) buckets.set(k, []);
     buckets.get(k).push(value);
   };
+  const filter = mapping.filter && Number.isInteger(mapping.filter.col) ? mapping.filter : null;
   for (const r of rows) {
+    if (filter && !filter.values.includes(String(r[filter.col] ?? '').trim())) continue;
     const date = parseDate(r[mapping.dateCol], mapping.dateFormat, Boolean(mapping.utc));
     if (mapping.format === 'long') {
       total++;
@@ -183,19 +190,23 @@ export function applyMapping(headers, rows, mapping) {
         const raw = r[c];
         if (raw === undefined || raw === '') continue; // blank cell: not an error
         total++;
-        const value = toNum(raw);
+        let value = toNum(raw);
         if (!date || value === null) { skipped++; continue; }
-        add(metricNameFor(headers, mapping, c), date, value);
+        if (mapping.scale && mapping.scale[c]) value *= mapping.scale[c];
+        const metric = metricNameFor(headers, mapping, c);
+        if (mapping.aggs && mapping.aggs[c]) aggFor.set(metric, mapping.aggs[c]);
+        add(metric, date, value);
       }
     }
   }
   const records = [];
   for (const [k, vals] of buckets) {
     const [metric, date] = [k.slice(0, k.lastIndexOf('|')), k.slice(k.lastIndexOf('|') + 1)];
-    const agg = mapping.agg === 'auto' ? autoAgg(metric) : mapping.agg;
+    const agg = aggFor.get(metric) || (mapping.agg === 'auto' ? autoAgg(metric) : mapping.agg);
     let value;
     if (agg === 'sum') value = vals.reduce((a, b) => a + b, 0);
     else if (agg === 'last') value = vals[vals.length - 1];
+    else if (agg === 'max') value = Math.max(...vals);
     else value = vals.reduce((a, b) => a + b, 0) / vals.length;
     records.push({ metric, date, value: Math.round(value * 1000) / 1000 });
   }

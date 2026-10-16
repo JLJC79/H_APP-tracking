@@ -6,7 +6,7 @@ A private, offline health dashboard that you install on an Android phone from Ch
 
 ## Privacy model
 
-- **Your data never leaves the phone.** It is stored in the browser's IndexedDB storage for this app. There is no server, account or analytics, and the app sends no network requests with your data. A Content-Security-Policy blocks requests to any other site.
+- **Your data never leaves the phone.** It is stored in the browser's IndexedDB storage for this app. There is no server, account or analytics, and the app never uploads your data. A Content-Security-Policy blocks requests to any other site, except Microsoft sign-in and OneDrive for the optional [OneDrive sync](#onedrive-sync-optional-advanced), which only *downloads* from the app's own OneDrive folder.
 - **This repository contains code only.** It is public so it can be hosted free on GitHub Pages. Anyone who opens the site gets an empty app with its own separate storage. They cannot see yours.
 - **Never commit real data.** `.gitignore` blocks backup files and CSVs outside `sample-data/`. The deploy workflow also refuses to publish if one slips in. Everything in `sample-data/` is fake.
 - **The PIN is a screen lock, not encryption.** It hides the app when it opens and after 1 minute in the background. It does not protect against someone with full access to your unlocked phone. Use your phone's own screen lock too.
@@ -134,13 +134,62 @@ The mapping is saved under the file's exact header row. With **Import files with
 1. On the phone, open **Samsung Health → ☰ / ⋮ → Settings → Download personal data** and confirm. (The menu wording varies a little between versions.)
 2. The export lands in **Download/Samsung Health/** as a folder with one CSV per data type, such as `com.samsung.shealth.tracker.heart_rate.<date>.csv` or `com.samsung.shealth.step_daily_trend.<date>.csv`.
 3. In this app, **Wearables → Import CSV**, open that folder and select the files you want (long-press to select several).
-4. The first time, map each file: the app skips Samsung's information line, drops the `com.samsung.health…` prefixes from column names and ticks UTC. Use **Save as** to name the columns you care about (for example `heart_rate` → `Heart rate avg (bpm)`, `count` → `Steps`). Next time, the same files import automatically.
+4. These files import with **built-in mappings**, no questions asked: daily steps (`step_daily_trend`, combined total only), heart rate (`tracker.heart_rate`), sleep (`shealth.sleep`, minutes converted to hours and counted on the day you wake up), weight, blood pressure, blood oxygen (`tracker.oxygen_saturation`), respiratory rate, skin temperature and stress. They are saved as `Steps`, `Distance (km)`, `Heart rate avg (bpm)`, `Sleep (hours)`, `Sleep score`, `Weight (kg)`, `Body fat (%)`, `BP systolic (mmHg)`, `BP diastolic (mmHg)`, `SpO2 (%)` and so on. Other Samsung files show the mapping form: the app skips Samsung's information line, drops the `com.samsung.health…` prefixes and ticks UTC.
+
+HRV isn't imported: Samsung's `hrv` CSV holds no values (they are in the export's `jsons` folder).
 
 Fake examples in the Samsung layout: [`fake-samsung-heart_rate…csv`](sample-data/fake-samsung-heart_rate.20250430120000.csv) and [`fake-samsung-step_daily_trend…csv`](sample-data/fake-samsung-step_daily_trend.20250430120000.csv).
 
+## Files from OneDrive (no setup)
+On Android, the app's file pickers can open files **straight from the OneDrive app**: tap **Browse** and choose **OneDrive**. Nothing needs registering, and the app only reads the files you pick.
+
+- **Wearables → Import CSV:** select the new CSVs (built-in Samsung mappings import them straight away).
+- **Labs → Import:** pick one or more lab results files (format below). Each file is **shown to you before saving**. Untick anything that doesn't match the report. Results already in the app are marked *Already saved* and unticked; test names the app hasn't seen before are marked *New test name*.
+- The app remembers which file names it has imported and marks them in the summary. Importing a file twice is harmless.
+
+[`docs/cowork-sync.md`](docs/cowork-sync.md) has ready-to-paste instructions for a Cowork task that copies the right wearable files and writes lab results files into `MEDICAL/_dashboard-inbox` in your OneDrive.
+
+### Lab results file format
+One JSON file per report. Rows use the same rules as the backup format's `labs` section.
+
+```json
+{
+  "format": "health-dashboard-labs",
+  "version": 1,
+  "source": "01_Pathology/report-name.pdf",
+  "labs": [
+    { "test": "Ferritin", "value": 45, "units": "ug/L", "low": 30, "high": 300, "date": "2026-03-12", "notes": "Lab name" }
+  ]
+}
+```
+
+## OneDrive sync (optional, advanced)
+**Needs a Microsoft app registration.** For a personal Microsoft account this now requires an Azure account (Microsoft no longer lets personal accounts register apps without a directory), which asks for a card for identity checks. If you'd rather not, use the file pickers above instead.
+
+With it, the app can pull files from **its own OneDrive folder**, `Apps/Health Dashboard`, so you (or a Cowork task on your PC) can drop wearable exports and lab results there instead of moving files to the phone.
+
+- **The app can only see that one folder.** It asks Microsoft for `Files.ReadWrite.AppFolder`, which gives no access to the rest of your OneDrive.
+- **Nothing is uploaded.** The app downloads new files, and after importing moves each one from `inbox` to `done` inside its folder. Your health data stays in the phone's storage, as before.
+- **Wearable CSVs** (`inbox/wearables/*.csv`) import straight away with built-in or saved mappings. A file the app doesn't recognise waits in the inbox until you map it once (**Map them now**).
+- **Lab results** (`inbox/labs/*.json`) are **shown to you before saving**. Untick anything that doesn't match the report. Results already in the app are marked *Already saved* and unticked; test names the app hasn't seen before are marked *New test name*.
+- Sync runs when you tap **Sync** (Overview or Settings), not in the background. You'll be asked to sign in again roughly once a day, as Microsoft limits how long browser apps stay signed in.
+
+### One-time setup (about 10 minutes, on a computer)
+1. Go to **https://portal.azure.com** and sign in with the same personal Microsoft account as your OneDrive. If App registrations says you need a directory, sign up for an Azure account first.
+2. Search for **App registrations** → **+ New registration**.
+   - **Name:** `Health Dashboard`. This becomes the folder name, `OneDrive/Apps/Health Dashboard`.
+   - **Supported account types:** *Personal Microsoft accounts only*.
+   - **Redirect URI:** platform **Single-page application (SPA)**, URL `https://jljc79.github.io/H_APP-tracking/` (with the slash at the end).
+   - Click **Register**.
+3. On the app's **Overview** page, copy the **Application (client) ID**. It isn't a secret.
+4. Under **API permissions** → **+ Add a permission** → **Microsoft Graph** → **Delegated permissions**, add **Files.ReadWrite.AppFolder** and **offline_access**, then click **Add permissions**.
+5. On the phone: **Settings → OneDrive sync**, paste the ID, tap **Connect OneDrive**, sign in and accept. Then tap **Sync now** once: this creates `inbox/wearables`, `inbox/labs` and `done` in the app's folder.
+
+The lab files use the [format above](#lab-results-file-format).
+
 ## Keeping it up to date
-- **After a doctor visit:** Labs → **+ Visit**, choose **Repeat tests from a previous visit**, type the new values, **Save all**.
-- **Wearables (weekly or monthly):** export from Samsung Health (or your app), then Wearables → Import CSV and select the new files. Saved mappings import them automatically. Overlapping days are updated, not duplicated. Delete the export from Download afterwards if you don't want copies lying around.
+- **After a doctor visit:** if Cowork wrote a lab results file, Labs → **Import** → Browse → OneDrive → `MEDICAL/_dashboard-inbox/labs`, review, **Save ticked**. Otherwise Labs → **+ Visit**, choose **Repeat tests from a previous visit**, type the new values, **Save all**.
+- **Wearables (weekly or monthly):** export from Samsung Health (or your app). Let Cowork copy the useful files to `MEDICAL/_dashboard-inbox/wearables`, then Wearables → Import CSV → Browse → OneDrive and select the new ones. Without it, use Wearables → Import CSV and select the new files. Saved mappings import them automatically. Overlapping days are updated, not duplicated. Delete the export from Download afterwards if you don't want copies lying around.
 - **Daily:** Log → quick entry.
 - **Back up regularly:** Settings → **Export backup** after each batch of changes, or at least monthly. Keep the file in a private place, such as your own Google Drive, and delete older copies you no longer need. The Settings screen shows the date of your last export.
 
@@ -154,6 +203,8 @@ js/app.js                    hash router, PIN lock, service worker registration
 js/db.js                     IndexedDB wrapper (stores: labs, metrics, logFields, logEntries, settings)
 js/backup.js                 export, validation, import
 js/csv.js                    CSV parser and column mapping
+js/presets.js                built-in mappings for Samsung Health files
+js/onedrive.js               OneDrive sign-in (PKCE) and app-folder Graph calls
 js/chart.js                  SVG line chart with reference band, sparkline, data table
 js/views/*.js                one module per screen
 sw.js                        offline cache. Bump VERSION when any file changes

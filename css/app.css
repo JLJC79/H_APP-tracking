@@ -261,3 +261,5 @@ details > summary { cursor: pointer; color: var(--accent); font-weight: 600; min
 .visit-row:first-child { border-top: 0; }
 .visit-row .field { margin-bottom: .5rem; }
 .visit-row.row-error { border-left: 3px solid var(--danger); padding-left: .5rem; }
+/* Long file names (Samsung exports) must wrap rather than widen the page. */
+.list li > .grow, .card .muted, .card p { min-width: 0; overflow-wrap: anywhere; }

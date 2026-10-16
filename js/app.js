@@ -6,6 +6,9 @@ import * as labs from './views/labs.js';
 import * as log from './views/log.js';
 import * as metrics from './views/metrics.js';
 import * as settings from './views/settings.js';
+import * as sync from './views/sync.js';
+import { handleRedirect } from './onedrive.js';
+import { toast } from './util.js';
 
 const ROUTES = {
   overview: { title: 'Overview', view: overview },
@@ -13,6 +16,7 @@ const ROUTES = {
   log: { title: 'Daily log', view: log },
   metrics: { title: 'Wearables', view: metrics },
   settings: { title: 'Settings & data', view: settings },
+  sync: { title: 'OneDrive sync', view: sync },
 };
 
 const main = document.getElementById('main');
@@ -102,6 +106,9 @@ document.addEventListener('visibilitychange', async () => {
 async function boot() {
   await openDb();
   requestPersistence();
+  // Returning from Microsoft sign-in (OneDrive sync)?
+  const od = await handleRedirect();
+  if (od) toast(od.error ? `OneDrive: ${od.error}` : 'OneDrive connected');
   window.addEventListener('hashchange', () => { if (!isLocked()) render(); });
   if (await hasPin()) showLock();
   else render();

@@ -4,6 +4,7 @@ import { buildBackup, backupFileName, validateBackup, applyBackup } from '../bac
 import { hasPin, setPin, clearPin, isValidPin, verifyPin } from '../pin.js';
 import { loadDemo, removeDemo } from '../demo.js';
 import { esc, downloadFile, readFileText, toast, fmtDate } from '../util.js';
+import { getClientId, setClientId, isConnected, signIn, signOut } from '../onedrive.js';
 
 let pendingImport = null; // { fileName, result }
 
@@ -35,6 +36,7 @@ export async function render(el) {
   const lastExport = await getSetting('lastExport', null);
   const { persisted, usage } = await storageInfo();
   const theme = currentTheme();
+  const [odClient, odConnected] = await Promise.all([getClientId(), isConnected()]);
   const hasData = labs.length + metrics.length + fields.length + entries.length > 0;
 
   el.innerHTML = `
@@ -47,6 +49,20 @@ export async function render(el) {
       <div class="field" style="margin-top:1rem"><label for="import-file">Import a backup file</label>
         <input id="import-file" type="file" accept=".json,application/json"></div>
       <div id="import-panel"></div>
+    </section>
+
+    <section class="card">
+      <h2>OneDrive sync (advanced)</h2>
+      <p class="muted">Not needed to use OneDrive: the import screens can open files from OneDrive directly (Browse → OneDrive).
+        This optional one-tap sync reads the app's own OneDrive folder, <em>Apps/Health Dashboard</em>, and nothing else. It needs a Microsoft
+        app registration, which for a personal account requires an Azure account. See the README.</p>
+      ${odConnected
+        ? `<p class="badge badge-ok">Connected</p>
+           <div class="row"><a class="btn btn-primary grow" href="#/sync">Sync now</a><button class="btn grow" id="od-signout">Disconnect</button></div>`
+        : `<div class="field"><label for="od-client">Application (client) ID</label>
+             <input id="od-client" value="${esc(odClient)}" autocomplete="off" spellcheck="false" placeholder="e.g. 0a1b2c3d-…"></div>
+           <button class="btn btn-primary btn-block" id="od-signin">Connect OneDrive</button>
+           <p class="error" id="od-error" role="alert"></p>`}
     </section>
 
     <section class="card">
@@ -92,9 +108,28 @@ export async function render(el) {
 
     <section class="card">
       <h2>About &amp; privacy</h2>
-      <p class="muted">Health Dashboard keeps everything on this device. It has no account, no server, no analytics and makes no network requests with your data.
-        The app's own files are cached for offline use.</p>
+      <p class="muted">Health Dashboard keeps everything on this device. It has no account, no server and no analytics, and never uploads your data.
+        The only network requests are the app's own files (cached for offline use) and, if you connect OneDrive, downloads from the app's own OneDrive folder.</p>
     </section>`;
+
+  // OneDrive
+  const odIn = el.querySelector('#od-signin');
+  if (odIn) odIn.addEventListener('click', async () => {
+    const id = el.querySelector('#od-client').value.trim();
+    const err = el.querySelector('#od-error');
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      err.textContent = 'Paste the Application (client) ID from the Azure portal (it looks like 0a1b2c3d-1234-…).';
+      return;
+    }
+    await setClientId(id);
+    await signIn('#/sync');
+  });
+  const odOut = el.querySelector('#od-signout');
+  if (odOut) odOut.addEventListener('click', async () => {
+    await signOut();
+    toast('OneDrive disconnected');
+    await render(el);
+  });
 
   // Export
   el.querySelector('#export').addEventListener('click', async () => {

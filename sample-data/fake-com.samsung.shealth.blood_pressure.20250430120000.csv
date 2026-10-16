@@ -1,0 +1,12 @@
+com.samsung.shealth.blood_pressure,6313015,5
+calibration_id,shm_data_id,shm_device_uuid,shm_update_time,shm_create_time,medication,com.samsung.health.blood_pressure.create_sh_ver,com.samsung.health.blood_pressure.start_time,com.samsung.health.blood_pressure.custom,com.samsung.health.blood_pressure.modify_sh_ver,com.samsung.health.blood_pressure.update_time,com.samsung.health.blood_pressure.create_time,com.samsung.health.blood_pressure.client_data_id,com.samsung.health.blood_pressure.mean,com.samsung.health.blood_pressure.client_data_ver,com.samsung.health.blood_pressure.pulse,com.samsung.health.blood_pressure.time_offset,com.samsung.health.blood_pressure.deviceuuid,com.samsung.health.blood_pressure.comment,com.samsung.health.blood_pressure.pkg_name,com.samsung.health.blood_pressure.diastolic,com.samsung.health.blood_pressure.datauuid,com.samsung.health.blood_pressure.systolic,
+,,,,,,,2025-03-01 21:00:00.000,,,,,,91,,70,UTC+1000,FakeDev01,,,79,fake-bp-0,114,
+,,,,,,,2025-03-02 21:00:00.000,,,,,,87,,62,UTC+1000,FakeDev01,,,72,fake-bp-1,116,
+,,,,,,,2025-03-03 21:00:00.000,,,,,,96,,61,UTC+1000,FakeDev01,,,81,fake-bp-2,126,
+,,,,,,,2025-03-04 21:00:00.000,,,,,,94,,70,UTC+1000,FakeDev01,,,74,fake-bp-3,135,
+,,,,,,,2025-03-05 21:00:00.000,,,,,,89,,75,UTC+1000,FakeDev01,,,72,fake-bp-4,123,
+,,,,,,,2025-03-06 21:00:00.000,,,,,,93,,60,UTC+1000,FakeDev01,,,83,fake-bp-5,114,
+,,,,,,,2025-03-07 21:00:00.000,,,,,,89,,72,UTC+1000,FakeDev01,,,70,fake-bp-6,127,
+,,,,,,,2025-03-08 21:00:00.000,,,,,,88,,62,UTC+1000,FakeDev01,,,70,fake-bp-7,124,
+,,,,,,,2025-03-09 21:00:00.000,,,,,,86,,63,UTC+1000,FakeDev01,,,72,fake-bp-8,114,
+,,,,,,,2025-03-10 21:00:00.000,,,,,,95,,70,UTC+1000,FakeDev01,,,83,fake-bp-9,120,

@@ -2,6 +2,7 @@
 import { getAll, getSetting } from '../db.js';
 import { sparkline } from '../chart.js';
 import { latestByTest } from './labs.js';
+import { isConnected } from '../onedrive.js';
 import {
   esc, fmtDate, fmtNum, rangeStatus, statusBadge, rangeText, segControl, rangeStart, inRange,
   byDate, mean, groupBy, prettyName, todayISO,
@@ -13,6 +14,7 @@ const MAX_DEFAULT_TILES = 8;
 export async function render(el) {
   const [labs, metrics, fields, entries] = await Promise.all(['labs', 'metrics', 'logFields', 'logEntries'].map(getAll));
   const starred = await getSetting('overviewKeys', []);
+  const syncBtn = (await isConnected()) ? '<a class="btn btn-sm" href="#/sync">⟳ Sync OneDrive</a>' : '';
   const start = rangeStart(range);
 
   if (!labs.length && !metrics.length && !fields.length) {
@@ -24,6 +26,7 @@ export async function render(el) {
         <li><a href="#/log">Set up a daily log</a></li>
         <li><a href="#/metrics/import">Import wearable data (CSV)</a></li>
         <li><a href="#/settings">Restore a backup, or load fake demo data to explore</a></li>
+        ${syncBtn ? '<li><a href="#/sync">Sync from OneDrive</a></li>' : ''}
       </ul></div>`;
     return;
   }
@@ -68,7 +71,7 @@ export async function render(el) {
   const loggedToday = logFields.filter((f) => doneToday.has(f.id)).length;
 
   el.innerHTML = `
-    <div class="row" style="margin-bottom:1rem">${segControl('range', range)}</div>
+    <div class="row" style="margin-bottom:1rem"><div class="grow">${segControl('range', range)}</div>${syncBtn}</div>
 
     ${logFields.length ? `<a class="card row" href="#/log" style="color:inherit;text-decoration:none">
       <span class="grow"><strong>Today's log</strong><br><small>${loggedToday} of ${logFields.length} fields filled</small></span>

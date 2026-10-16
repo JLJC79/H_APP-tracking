@@ -1,6 +1,6 @@
 // Service worker: precaches the app shell so the app works fully offline.
 // Bump VERSION whenever any file in ASSETS changes, so phones pick up the update.
-const VERSION = 'v1.1.0';
+const VERSION = 'v1.2.0';
 const CACHE = `health-dashboard-${VERSION}`;
 
 const ASSETS = [
@@ -14,6 +14,8 @@ const ASSETS = [
   './js/util.js',
   './js/chart.js',
   './js/csv.js',
+  './js/presets.js',
+  './js/onedrive.js',
   './js/backup.js',
   './js/pin.js',
   './js/demo.js',
@@ -22,6 +24,7 @@ const ASSETS = [
   './js/views/log.js',
   './js/views/metrics.js',
   './js/views/settings.js',
+  './js/views/sync.js',
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/icon-maskable-512.png',
@@ -46,7 +49,7 @@ self.addEventListener('message', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  // Only same-origin GETs are handled; the app makes no other requests.
+  // Only same-origin GETs are handled. Microsoft sign-in and OneDrive requests go straight to the network.
   if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
 
   event.respondWith((async () => {

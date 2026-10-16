@@ -1,0 +1,44 @@
+# Deploys the static app to GitHub Pages on every push to main.
+# One-time setup: repo Settings → Pages → Build and deployment → Source: "GitHub Actions".
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Privacy guard: fail the deploy if anything that looks like a real export is in the repo.
+      - name: Check for data files
+        run: |
+          bad=$(git ls-files | grep -Ei '(health-backup-.*\.json|\.backup\.json|\.csv$)' | grep -v '^sample-data/' || true)
+          if [ -n "$bad" ]; then echo "Refusing to deploy, possible personal data files:"; echo "$bad"; exit 1; fi
+
+      - name: Assemble site
+        run: |
+          mkdir _site
+          cp -r index.html manifest.webmanifest sw.js .nojekyll css js icons sample-data _site/
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

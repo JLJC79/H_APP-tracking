@@ -28,9 +28,9 @@ Installing also lets Chrome mark the app's storage as *persistent*, so it isn't 
 | Screen | What it does |
 |---|---|
 | **Overview** | Time range 1M / 6M / 1Y / All. Shows today's log progress, the latest lab result per test with out-of-range flags, and key metric tiles (latest, average, sparkline). Star metrics on the Wearables or Log history screens to choose the tiles. |
-| **Labs** | Add, edit and delete results (test, value, units, reference low/high, date, notes). The list is grouped by test and flags High ▲ / Low ▼. Each test has a trend chart with the reference range shaded and out-of-range points in red, plus a data table for screen readers. |
+| **Labs** | Add, edit and delete results (test, value, units, reference low/high, date, notes). **+ Visit** enters every result from one doctor visit or lab report at once (see below). The list is grouped by test and flags High ▲ / Low ▼. Each test has a trend chart with the reference range shaded and out-of-range points in red, plus a data table for screen readers. |
 | **Log** | Define your own fields: number (with unit and step), scale 1–10, yes/no, or text. The quick-entry screen has big buttons within thumb reach and saves on every tap. Tap a selected button again to clear it. History shows charts and yes/no rates. Fields can be reordered, archived (keeps history) or deleted. |
-| **Wearables** | CSV import with a column mapping you set once and the app saves (see below). One chart per metric. Rename/merge a metric, or delete all of its data. |
+| **Wearables** | CSV import (several files at once, Samsung Health supported) with a column mapping you set once and the app saves (see below). One chart per metric. Rename/merge a metric, or delete all of its data. |
 | **Settings** | Export/import backup, PIN lock, theme (system/light/dark), demo data, storage status, delete everything. |
 
 ## Back up your data
@@ -108,17 +108,41 @@ One entry per field per day. Importing a second entry for the same day and field
 
 **Sample file:** [`sample-data/fake-sample-backup.json`](sample-data/fake-sample-backup.json) uses every section, including log entries that reference fields by name. All its values are fake.
 
+## Lab results from a visit
+**Labs → + Visit** enters a whole lab report in one go. Enter the date and, if you like, the clinic or lab (saved in each result's notes). Then add one row per test: name, value, units and reference range.
+
+- Pick a test you have entered before, and its units and range are filled in.
+- **Repeat tests from a previous visit** adds a row for each test from that date, with units and ranges filled in. You type only the new values.
+- Rows without a value are ignored, so you can leave tests that weren't done this time. A row with a value needs a test name, and the same test can't appear twice.
+- **Save all** saves every row together.
+
 ## Wearable CSV import
+Most wearable apps, and tools that read Health Connect or Google Fit, can export CSV. Go to **Wearables → Import CSV** and pick one or more files. Files are read on the phone and nothing is uploaded. Map each new kind of file once:
 
-Most wearable apps, and tools that read Health Connect or Google Fit, can export CSV. To import one, go to **Wearables → Import CSV** and pick the file. The file is read on the phone and nothing is uploaded. Then map its columns once:
-
+- **Column names are on:** some exports put a line of information above the column names. The app finds the real header row, and you can pick a different one.
 - **Long layout:** one row per measurement, with a date column, a metric-name column and a value column ([example](sample-data/fake-wearable-long.csv)).
-- **Wide layout:** one row per date and one column per metric. Tick the columns to import ([example](sample-data/fake-wearable-wide.csv)).
-- **Date format:** `YYYY-MM-DD` (with or without a time), `DD/MM/YYYY` or `MM/DD/YYYY`. The app guesses, and shows how it reads the first row so you can check. Any time of day is ignored.
+- **Wide layout:** one row per date and one column per metric. Tick the columns to import ([example](sample-data/fake-wearable-wide.csv)). Id, version, time and device columns aren't ticked by default.
+- **Save as:** for each ticked column you can give the metric name to store it under. Pick an existing name from the list (for example `Steps` or `Heart rate avg (bpm)`) so new data joins the history you already have.
+- **Date format:** `YYYY-MM-DD` (with or without a time), `DD/MM/YYYY`, `MM/DD/YYYY` or a Unix timestamp. The app guesses, and shows how it reads the first row so you can check.
+- **Times are UTC:** converts times to your phone's local day before grouping by day. It's on by default when the file has a `time_offset` column (Samsung Health). When it's off, any time of day is ignored.
 - **Several values on one day:** *Automatic* adds up steps, calories, distance and minutes, and averages everything else. You can also choose average, sum or last for all metrics.
 - **Check** shows how many daily values each metric will get, and how many cells were unreadable, before anything is saved.
 
-The mapping is saved under the file's exact header row, so the next export from the same app imports with no questions asked. Comma, semicolon and tab delimiters are all detected. Re-importing overlapping dates updates those days rather than duplicating them. If two sources name the same metric differently (for example `hrv_ms` and `HRV (ms)`), use **Rename / merge** on the Wearables screen.
+The mapping is saved under the file's exact header row. With **Import files with saved mappings automatically** on (the default), the next export from the same app imports with no questions asked. Turn it off to review each file. A summary of every file is shown at the end. Comma, semicolon and tab delimiters are all detected. Re-importing overlapping dates updates those days rather than duplicating them. If two sources name the same metric differently (for example `hrv_ms` and `HRV (ms)`), use **Rename / merge** on the Wearables screen.
+
+### Samsung Health
+1. On the phone, open **Samsung Health → ☰ / ⋮ → Settings → Download personal data** and confirm. (The menu wording varies a little between versions.)
+2. The export lands in **Download/Samsung Health/** as a folder with one CSV per data type, such as `com.samsung.shealth.tracker.heart_rate.<date>.csv` or `com.samsung.shealth.step_daily_trend.<date>.csv`.
+3. In this app, **Wearables → Import CSV**, open that folder and select the files you want (long-press to select several).
+4. The first time, map each file: the app skips Samsung's information line, drops the `com.samsung.health…` prefixes from column names and ticks UTC. Use **Save as** to name the columns you care about (for example `heart_rate` → `Heart rate avg (bpm)`, `count` → `Steps`). Next time, the same files import automatically.
+
+Fake examples in the Samsung layout: [`fake-samsung-heart_rate…csv`](sample-data/fake-samsung-heart_rate.20250430120000.csv) and [`fake-samsung-step_daily_trend…csv`](sample-data/fake-samsung-step_daily_trend.20250430120000.csv).
+
+## Keeping it up to date
+- **After a doctor visit:** Labs → **+ Visit**, choose **Repeat tests from a previous visit**, type the new values, **Save all**.
+- **Wearables (weekly or monthly):** export from Samsung Health (or your app), then Wearables → Import CSV and select the new files. Saved mappings import them automatically. Overlapping days are updated, not duplicated. Delete the export from Download afterwards if you don't want copies lying around.
+- **Daily:** Log → quick entry.
+- **Back up regularly:** Settings → **Export backup** after each batch of changes, or at least monthly. Keep the file in a private place, such as your own Google Drive, and delete older copies you no longer need. The Settings screen shows the date of your last export.
 
 ## Development
 

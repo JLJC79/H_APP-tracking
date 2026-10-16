@@ -1,6 +1,6 @@
 // Service worker: precaches the app shell so the app works fully offline.
 // Bump VERSION whenever any file in ASSETS changes, so phones pick up the update.
-const VERSION = 'v1.0.0';
+const VERSION = 'v1.1.0';
 const CACHE = `health-dashboard-${VERSION}`;
 
 const ASSETS = [

@@ -1,6 +1,6 @@
 // Lab results: grouped list with flags, per-test trend chart, add/edit form.
-// Routes: #/labs · #/labs/test/<name> · #/labs/new[/<name>] · #/labs/edit/<id>
-import { getAll, get, put, remove } from '../db.js';
+// Routes: #/labs · #/labs/test/<name> · #/labs/new[/<name>] · #/labs/edit/<id> · #/labs/visit
+import { getAll, get, put, putMany, remove } from '../db.js';
 import { lineChart, dataTable } from '../chart.js';
 import {
   esc, uid, todayISO, fmtDate, fmtNum, toNum, rangeStatus, statusBadge, rangeText,
@@ -24,6 +24,7 @@ export async function render(el, params) {
   const [mode, arg] = params;
   if (mode === 'test') return renderDetail(el, arg);
   if (mode === 'new') return renderForm(el, null, arg);
+  if (mode === 'visit') return renderVisit(el);
   if (mode === 'edit') return renderForm(el, await get('labs', arg));
   return renderList(el);
 }
@@ -41,7 +42,9 @@ async function renderList(el) {
     el.innerHTML = `<div class="card empty-state">
       <h2>No lab results yet</h2>
       <p>Add results by hand, or import a backup file in Settings.</p>
-      <a class="btn btn-primary" href="#/labs/new">Add a result</a></div>`;
+      <div class="row" style="justify-content:center">
+        <a class="btn btn-primary" href="#/labs/visit">Add a visit</a>
+        <a class="btn" href="#/labs/new">Add one result</a></div></div>`;
     return;
   }
 
@@ -49,7 +52,8 @@ async function renderList(el) {
     <div class="row" style="margin-bottom:1rem">
       <p class="grow" style="margin:0">${groups.length} test${groups.length === 1 ? '' : 's'} ·
         ${flagged.length ? `<strong class="error" style="display:inline">${flagged.length} out of range</strong> (latest)` : 'all latest results in range'}</p>
-      <a class="btn btn-primary" href="#/labs/new">+ Add</a>
+      <a class="btn" href="#/labs/new">+ Add</a>
+      <a class="btn btn-primary" href="#/labs/visit">+ Visit</a>
     </div>
     <div class="field"><label for="lab-filter">Filter tests</label>
       <input id="lab-filter" type="search" placeholder="Type to filter" autocomplete="off"></div>
@@ -195,5 +199,125 @@ async function renderForm(el, entry, prefillTest) {
     await remove('labs', e.id);
     toast('Deleted');
     location.hash = href('test', e.test);
+  });
+}
+
+// ---- Visit form: several results from one doctor visit, saved together ----
+
+async function renderVisit(el) {
+  const labs = await getAll('labs');
+  const tests = latestByTest(labs);
+  const known = new Map(tests.map((t) => [t.test.toLowerCase(), t]));
+  const visits = [...groupBy(labs, (l) => l.date).entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1));
+  const v = (n) => (n === null || n === undefined ? '' : n);
+
+  const rowHtml = (r = {}) => `<div class="visit-row">
+      <div class="row"><div class="field grow" style="margin:0"><label aria-hidden="true">Test</label>
+        <input name="test" aria-label="Test" list="test-names" value="${esc(r.test || '')}" autocomplete="off" autocapitalize="words"></div>
+        <button class="btn btn-sm btn-ghost" type="button" data-remove aria-label="Remove this row">✕</button></div>
+      <div class="grid-4">
+        <div class="field"><label aria-hidden="true">Value</label><input name="value" aria-label="Value" inputmode="decimal" value="${v(r.value)}"></div>
+        <div class="field"><label aria-hidden="true">Units</label><input name="units" aria-label="Units" value="${esc(r.units || '')}" autocomplete="off"></div>
+        <div class="field"><label aria-hidden="true">Ref low</label><input name="low" aria-label="Ref low" inputmode="decimal" value="${v(r.low)}"></div>
+        <div class="field"><label aria-hidden="true">Ref high</label><input name="high" aria-label="Ref high" inputmode="decimal" value="${v(r.high)}"></div>
+      </div></div>`;
+
+  el.innerHTML = `
+    <p><a href="#/labs">← All lab results</a></p>
+    <form class="card" id="visit-form" novalidate>
+      <h2>Add a visit</h2>
+      <p class="muted">Enter all results from one visit or lab report. Rows without a value are ignored.</p>
+      <div class="grid-2">
+        <div class="field"><label for="v-date">Date</label>
+          <input id="v-date" name="date" type="date" required value="${esc(todayISO())}"></div>
+        <div class="field"><label for="v-clinic">Clinic / lab</label>
+          <input id="v-clinic" name="clinic" autocomplete="off" autocapitalize="words" placeholder="Optional"></div>
+      </div>
+      ${visits.length ? `<div class="field"><label for="v-repeat">Repeat tests from a previous visit</label>
+        <select id="v-repeat"><option value="">Choose a date…</option>
+          ${visits.map(([d, items]) => `<option value="${esc(d)}">${fmtDate(d)} · ${items.length} test${items.length === 1 ? '' : 's'}</option>`).join('')}
+        </select><p class="hint">Fills in the test names, units and ranges; you only type the new values.</p></div>` : ''}
+      <datalist id="test-names">${tests.map((t) => `<option value="${esc(t.test)}">`).join('')}</datalist>
+      <div id="rows">${rowHtml()}${rowHtml()}${rowHtml()}</div>
+      <button class="btn" type="button" id="add-row" style="width:100%;margin-bottom:.85rem">+ Add another test</button>
+      <p class="error" id="form-error" role="alert"></p>
+      <button class="btn btn-primary" type="submit" style="width:100%">Save all</button>
+    </form>`;
+
+  const form = el.querySelector('#visit-form');
+  const rowsEl = el.querySelector('#rows');
+  const rowEls = () => [...rowsEl.querySelectorAll('.visit-row')];
+  const q = (row, name) => row.querySelector(`[name="${name}"]`);
+  const isBlank = (row) => ['test', 'value', 'units', 'low', 'high'].every((n) => !q(row, n).value.trim());
+
+  const fillFromKnown = (row) => {
+    const t = known.get(q(row, 'test').value.trim().toLowerCase());
+    if (!t) return;
+    q(row, 'test').value = t.test;
+    if (!q(row, 'units').value) q(row, 'units').value = t.latest.units || '';
+    if (!q(row, 'low').value && t.latest.low != null) q(row, 'low').value = t.latest.low;
+    if (!q(row, 'high').value && t.latest.high != null) q(row, 'high').value = t.latest.high;
+  };
+  rowsEl.addEventListener('change', (e) => { if (e.target.name === 'test') fillFromKnown(e.target.closest('.visit-row')); });
+  rowsEl.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-remove]');
+    if (!b) return;
+    b.closest('.visit-row').remove();
+    if (!rowEls().length) rowsEl.insertAdjacentHTML('beforeend', rowHtml());
+  });
+  el.querySelector('#add-row').addEventListener('click', () => {
+    rowsEl.insertAdjacentHTML('beforeend', rowHtml());
+    const rs = rowEls();
+    q(rs[rs.length - 1], 'test').focus();
+  });
+
+  const repeat = el.querySelector('#v-repeat');
+  if (repeat) repeat.addEventListener('change', () => {
+    const date = repeat.value;
+    if (!date) return;
+    const have = new Set(rowEls().map((r) => q(r, 'test').value.trim().toLowerCase()).filter(Boolean));
+    rowEls().filter(isBlank).forEach((r) => r.remove());
+    const names = [...new Set(labs.filter((l) => l.date === date).map((l) => l.test))].sort((a, b) => a.localeCompare(b));
+    const add = names.filter((n) => !have.has(n.toLowerCase())).map((n) => {
+      const t = known.get(n.toLowerCase()).latest; // latest units/range, which may have changed since
+      return rowHtml({ test: n, units: t.units, low: t.low, high: t.high });
+    });
+    rowsEl.insertAdjacentHTML('beforeend', add.join(''));
+    if (!rowEls().length) rowsEl.insertAdjacentHTML('beforeend', rowHtml());
+    toast(`Added ${add.length} test${add.length === 1 ? '' : 's'}`);
+    repeat.value = '';
+  });
+
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const err = form.querySelector('#form-error');
+    err.textContent = '';
+    rowEls().forEach((r) => r.classList.remove('row-error'));
+    const date = form.date.value;
+    if (!isValidISODate(date)) { err.textContent = 'Enter a valid date.'; form.date.focus(); return; }
+    const notes = form.clinic.value.trim();
+    const recs = [];
+    const seen = new Set();
+    for (const [i, row] of rowEls().entries()) {
+      const raw = (n) => q(row, n).value.trim();
+      if (!raw('value')) continue; // blank value: row ignored
+      const fail = (msg, field) => { row.classList.add('row-error'); err.textContent = `Row ${i + 1}: ${msg}`; q(row, field).focus(); };
+      const rec = {
+        id: uid(), test: raw('test'), value: toNum(raw('value')), units: raw('units'),
+        low: toNum(raw('low')), high: toNum(raw('high')), date, notes,
+      };
+      if (!rec.test) return fail('enter a test name.', 'test');
+      if (rec.value === null) return fail('the value must be a number.', 'value');
+      if (raw('low') && rec.low === null) return fail('reference low must be a number.', 'low');
+      if (raw('high') && rec.high === null) return fail('reference high must be a number.', 'high');
+      if (rec.low !== null && rec.high !== null && rec.low > rec.high) return fail('reference low is above reference high.', 'low');
+      if (seen.has(rec.test.toLowerCase())) return fail(`${rec.test} is entered twice.`, 'test');
+      seen.add(rec.test.toLowerCase());
+      recs.push(rec);
+    }
+    if (!recs.length) { err.textContent = 'Enter at least one value.'; return; }
+    await putMany('labs', recs);
+    toast(`Saved ${recs.length} result${recs.length === 1 ? '' : 's'}`);
+    location.hash = '#/labs';
   });
 }

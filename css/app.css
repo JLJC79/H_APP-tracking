@@ -252,3 +252,12 @@ details > summary { cursor: pointer; color: var(--accent); font-weight: 600; min
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+.map-col { padding: .3rem 0; border-top: 1px solid var(--border); }
+.map-col:first-of-type { border-top: 0; }
+.map-col .save-as { margin: .3rem 0 .2rem 1.75rem; width: calc(100% - 1.75rem); }
+.grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .5rem; }
+@media (max-width: 420px) { .grid-4 { grid-template-columns: 1fr 1fr; } }
+.visit-row { padding: .6rem 0 .1rem; border-top: 1px solid var(--border); }
+.visit-row:first-child { border-top: 0; }
+.visit-row .field { margin-bottom: .5rem; }
+.visit-row.row-error { border-left: 3px solid var(--danger); padding-left: .5rem; }

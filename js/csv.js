@@ -48,10 +48,17 @@ export function detectHeaderRow(rows) {
   return i >= 0 && i < 10 ? i : 0;
 }
 
-/** Readable column name: "com.samsung.health.heart_rate.heart_rate" → "heart_rate". */
+/**
+ * Readable column name without the dotted package prefix, keeping the data type so generic
+ * names stay clear: "com.samsung.health.heart_rate.max" → "heart_rate_max",
+ * "com.samsung.health.heart_rate.heart_rate" → "heart_rate".
+ */
 export function cleanHeader(h) {
   const s = String(h || '').trim();
-  return /^[a-z0-9_]+(\.[a-z0-9_]+){2,}$/i.test(s) ? s.slice(s.lastIndexOf('.') + 1) : s;
+  if (!/^[a-z0-9_]+(\.[a-z0-9_]+){2,}$/i.test(s)) return s;
+  const parts = s.split('.');
+  const [type, leaf] = parts.slice(-2);
+  return leaf === type || leaf.startsWith(type + '_') ? leaf : `${type}_${leaf}`;
 }
 
 export const DATE_FORMATS = [
@@ -122,9 +129,13 @@ export function headerSignature(headers) {
   return headers.map((h) => h.trim().toLowerCase()).join('|');
 }
 
+/** Index of the first header matching the earliest pattern in the list (patterns are in priority order). */
 export function guessColumn(headers, patterns) {
-  const i = headers.findIndex((h) => patterns.some((p) => p.test(h)));
-  return i >= 0 ? i : null;
+  for (const p of patterns) {
+    const i = headers.findIndex((h) => p.test(h));
+    if (i >= 0) return i;
+  }
+  return null;
 }
 
 /** For agg 'auto': counts and totals are summed per day, everything else is averaged. */

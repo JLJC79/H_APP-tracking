@@ -7,6 +7,7 @@ import {
   detectHeaderRow, cleanHeader, isBookkeepingColumn,
 } from '../csv.js';
 import { resolvePreset } from '../presets.js';
+import { importedBefore, markImported } from '../labfiles.js';
 import {
   esc, uid, fmtDate, fmtNum, groupBy, byDate, segControl, rangeStart, inRange, mean,
   readFileText, toast, prettyName,
@@ -180,8 +181,10 @@ export async function importCsvText(fileName, text, { auto = true } = {}) {
     const result = applyMapping(rows[m.headerRow], rows.slice(m.headerRow + 1), m.mapping);
     // A mapping that reads nothing (e.g. an empty export) falls through to the form.
     if (result.records.length) {
+      const previously = await importedBefore(fileName);
       await saveRecords(result, fileName);
-      return { imported: resultFor(fileName, result, m.how) };
+      await markImported(fileName);
+      return { imported: { ...resultFor(fileName, result, m.how), previously } };
     }
   }
   return { rows, headerRow: m.headerRow, mapping: m.mapping };
@@ -222,7 +225,8 @@ async function renderImport(el) {
     <p><a href="#/metrics">← Wearables</a></p>
     <div class="card">
       <h2>Import wearable CSV</h2>
-      <p>Choose one or more CSV files exported from your wearable or health app (for Samsung Health, the files in <em>Download/Samsung Health</em>). Files are read on this device only; nothing is uploaded.</p>
+      <p>Choose one or more CSV files exported from your wearable or health app. On Android, tap <strong>Browse</strong> and pick <strong>OneDrive</strong> to open files straight from your OneDrive (for example the folder Cowork copies them to), or use the files in <em>Download/Samsung Health</em>. Files are read on this device only; nothing is uploaded.</p>
+      <p class="hint">Files you have imported before are marked in the summary. Importing one again is harmless: those days are updated, not duplicated.</p>
       <div class="field"><label for="csv-file">CSV files</label>
         <input id="csv-file" type="file" multiple accept=".csv,text/csv,text/plain"></div>
       <p class="hint">Works with “long” files (one row per date + metric + value) and “wide” files (one row per date, one column per metric).</p>
@@ -252,7 +256,7 @@ function renderSummary(el) {
       <ul class="list">${imp.results.map((r) => `<li><span class="grow"><strong>${esc(r.fileName)}</strong><br>
         ${r.error ? `<span class="error" style="display:inline">${esc(r.error)}</span>`
           : r.skippedFile ? '<small>Skipped</small>'
-          : `<small>${r.count} values · ${esc(r.how)}${r.skipped ? ` · ${r.skipped} unreadable value${r.skipped === 1 ? '' : 's'} skipped` : ''}</small>
+          : `<small>${r.count} values · ${esc(r.how)}${r.previously ? ` · <strong>imported before on ${fmtDate(r.previously)}</strong> (days updated, not duplicated)` : ''}${r.skipped ? ` · ${r.skipped} unreadable value${r.skipped === 1 ? '' : 's'} skipped` : ''}</small>
              ${r.metrics.map((m) => `<br><small>${esc(m.metric)}: ${m.days} day${m.days === 1 ? '' : 's'}, ${fmtDate(m.from)} – ${fmtDate(m.to)}</small>`).join('')}`}
       </span></li>`).join('')}</ul>
       <div class="row" style="margin-top:.75rem">
@@ -413,13 +417,15 @@ async function renderMapping(el) {
     const ok = check();
     if (!ok) return;
     const { cur, result } = ok;
+    const previously = await importedBefore(fileName);
     await saveRecords(result, fileName);
+    await markImported(fileName);
     if (form.save.checked) {
       const list = (await getSetting('csvMappings', [])).filter((x) => x.signature !== sig);
       list.push(cur);
       await setSetting('csvMappings', list);
     }
-    imp.results.push(resultFor(fileName, result, saved ? `mapping “${cur.name}”` : preset ? `built-in mapping: ${preset.name}` : 'new mapping'));
+    imp.results.push({ previously, ...resultFor(fileName, result, saved ? `mapping “${cur.name}”` : preset ? `built-in mapping: ${preset.name}` : 'new mapping') });
     imp.current = null;
     await processQueue(el);
   });

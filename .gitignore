@@ -1,0 +1,19 @@
+# PRIVACY GUARD: real health data must never be committed to this repo.
+# The app keeps all data on the device. These patterns catch the files
+# it produces (backups) and typical wearable exports, in case one ends
+# up in the working tree by accident.
+health-backup-*.json
+*.backup.json
+exports/
+private/
+data/
+*.csv
+!sample-data/*.csv
+*.zip
+*.xlsx
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

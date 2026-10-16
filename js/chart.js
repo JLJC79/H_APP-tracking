@@ -85,7 +85,7 @@ export function lineChart(el, opts) {
   const path = pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.t).toFixed(1)},${y(p.value).toFixed(1)}`).join('');
   const r = pts.length > 90 ? 1.8 : pts.length > 40 ? 2.5 : 3.5;
   const dots = pts.map((p) => {
-    const st = rangeStatus(p.value, low, high);
+    const st = rangeStatus(p.value, p.low ?? low, p.high ?? high);
     const out = st === 'low' || st === 'high';
     return `<circle class="pt${out ? ' out' : ''}" cx="${x(p.t).toFixed(1)}" cy="${y(p.value).toFixed(1)}" r="${out ? r + 1.5 : r}"><title>${fmtDate(p.date)}: ${fmtNum(p.value)} ${esc(unit)}${out ? ' (' + st + ')' : ''}</title></circle>`;
   }).join('');
@@ -114,7 +114,7 @@ export function sparkline(values) {
 /** Accessible table alternative for a chart, inside a <details>. */
 export function dataTable(points, unit = '', { low = null, high = null } = {}) {
   const rows = [...points].sort((a, b) => (a.date < b.date ? 1 : -1)).map((p) => {
-    const st = rangeStatus(p.value, low, high);
+    const st = rangeStatus(p.value, p.low ?? low, p.high ?? high);
     const out = st === 'low' || st === 'high';
     return `<tr><td>${fmtDate(p.date)}</td><td class="num${out ? ' flag' : ''}">${fmtNum(p.value)} ${esc(unit)}${out ? ' (' + st + ')' : ''}</td></tr>`;
   }).join('');

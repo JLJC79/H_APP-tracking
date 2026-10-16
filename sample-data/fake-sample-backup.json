@@ -1,0 +1,35 @@
+{
+  "format": "health-dashboard-backup",
+  "version": 1,
+  "exportedAt": "2025-03-01T09:00:00.000Z",
+  "_comment": "FAKE SAMPLE DATA for testing and documentation only. Not a real person's results.",
+  "labs": [
+    { "test": "Fasting glucose", "value": 5.1, "units": "mmol/L", "low": 3.9, "high": 5.6, "date": "2024-09-12", "notes": "Fake sample" },
+    { "test": "Fasting glucose", "value": 5.9, "units": "mmol/L", "low": 3.9, "high": 5.6, "date": "2025-02-20", "notes": "Fake sample" },
+    { "test": "Vitamin D", "value": 42, "units": "nmol/L", "low": 50, "high": 125, "date": "2024-09-12" },
+    { "test": "Vitamin D", "value": 68, "units": "nmol/L", "low": 50, "high": 125, "date": "2025-02-20" },
+    { "test": "LDL cholesterol", "value": 2.8, "units": "mmol/L", "low": null, "high": 3.0, "date": "2025-02-20" }
+  ],
+  "metrics": [
+    { "metric": "resting_hr", "date": "2025-02-26", "value": 59 },
+    { "metric": "resting_hr", "date": "2025-02-27", "value": 61 },
+    { "metric": "resting_hr", "date": "2025-02-28", "value": 58 },
+    { "metric": "steps", "date": "2025-02-26", "value": 8412 },
+    { "metric": "steps", "date": "2025-02-27", "value": 10230 },
+    { "metric": "steps", "date": "2025-02-28", "value": 6120 }
+  ],
+  "logFields": [
+    { "id": "mood", "name": "Mood", "type": "scale" },
+    { "id": "sleep", "name": "Sleep", "type": "number", "unit": "h", "step": 0.5 },
+    { "id": "exercised", "name": "Exercised", "type": "bool" },
+    { "id": "notes", "name": "Notes", "type": "text" }
+  ],
+  "logEntries": [
+    { "date": "2025-02-27", "fieldId": "mood", "value": 7 },
+    { "date": "2025-02-27", "fieldId": "sleep", "value": 7.5 },
+    { "date": "2025-02-27", "fieldId": "exercised", "value": true },
+    { "date": "2025-02-28", "field": "Mood", "value": 6 },
+    { "date": "2025-02-28", "field": "Exercised", "value": "no" },
+    { "date": "2025-02-28", "field": "Notes", "value": "Fake sample note" }
+  ]
+}

@@ -98,6 +98,14 @@ export async function remove(store, key) {
   return done(tx);
 }
 
+export async function removeMany(store, keys) {
+  const db = await openDb();
+  const tx = db.transaction(store, 'readwrite');
+  const os = tx.objectStore(store);
+  for (const k of keys) os.delete(k);
+  return done(tx);
+}
+
 export async function removeByIndex(store, index, value) {
   const db = await openDb();
   const tx = db.transaction(store, 'readwrite');

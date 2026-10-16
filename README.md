@@ -147,7 +147,7 @@ On Android, the app's file pickers can open files **straight from the OneDrive a
 - **Labs → Import:** pick one or more lab results files (format below). Each file is **shown to you before saving**. Untick anything that doesn't match the report. Results already in the app are marked *Already saved* and unticked; test names the app hasn't seen before are marked *New test name*.
 - The app remembers which file names it has imported and marks them in the summary. Importing a file twice is harmless.
 
-[`docs/cowork-sync.md`](docs/cowork-sync.md) has ready-to-paste instructions for a Cowork task that copies the right wearable files and writes lab results files into `MEDICAL/_dashboard-inbox` in your OneDrive.
+[`tools/export_for_app.py`](tools/export_for_app.py) writes these files from the MEDICAL folder's own tables (`results.csv`, `wearable_daily.csv`, `withings_daily.csv`) into `MEDICAL/_dashboard-inbox` in your OneDrive. See [`docs/cowork-sync.md`](docs/cowork-sync.md) for setup.
 
 ### Lab results file format
 One JSON file per report. Rows use the same rules as the backup format's `labs` section.
@@ -188,8 +188,8 @@ With it, the app can pull files from **its own OneDrive folder**, `Apps/Health D
 The lab files use the [format above](#lab-results-file-format).
 
 ## Keeping it up to date
-- **After a doctor visit:** if Cowork wrote a lab results file, Labs → **Import** → Browse → OneDrive → `MEDICAL/_dashboard-inbox/labs`, review, **Save ticked**. Otherwise Labs → **+ Visit**, choose **Repeat tests from a previous visit**, type the new values, **Save all**.
-- **Wearables (weekly or monthly):** export from Samsung Health (or your app). Let Cowork copy the useful files to `MEDICAL/_dashboard-inbox/wearables`, then Wearables → Import CSV → Browse → OneDrive and select the new ones. Without it, use Wearables → Import CSV and select the new files. Saved mappings import them automatically. Overlapping days are updated, not duplicated. Delete the export from Download afterwards if you don't want copies lying around.
+- **After a doctor visit:** once the medical inbox routine has run (it runs `export_for_app.py`), Labs → **Import** → Browse → OneDrive → `MEDICAL/_dashboard-inbox/labs`, review, **Save ticked**. Otherwise Labs → **+ Visit**, choose **Repeat tests from a previous visit**, type the new values, **Save all**.
+- **Wearables (weekly or monthly):** export from Samsung Health (or your app). After the medical inbox routine has processed the export, Wearables → Import CSV → Browse → OneDrive → `MEDICAL/_dashboard-inbox/wearables` and select the newest daily files. Without it, use Wearables → Import CSV and select the new files. Saved mappings import them automatically. Overlapping days are updated, not duplicated. Delete the export from Download afterwards if you don't want copies lying around.
 - **Daily:** Log → quick entry.
 - **Back up regularly:** Settings → **Export backup** after each batch of changes, or at least monthly. Keep the file in a private place, such as your own Google Drive, and delete older copies you no longer need. The Settings screen shows the date of your last export.
 
@@ -208,6 +208,7 @@ js/onedrive.js               OneDrive sign-in (PKCE) and app-folder Graph calls
 js/chart.js                  SVG line chart with reference band, sparkline, data table
 js/views/*.js                one module per screen
 sw.js                        offline cache. Bump VERSION when any file changes
+tools/export_for_app.py      exports new rows from the MEDICAL folder tables for import (runs on the PC)
 tools/serve.ps1              local static server (Windows, no Python/Node needed)
 tools/make-icons.ps1         regenerates icons/*.png
 ```

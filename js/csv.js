@@ -35,20 +35,61 @@ export function parseCSV(text) {
   return rows.map((r) => r.map((f) => f.trim()));
 }
 
+/**
+ * Index of the row holding the column names. Some exports (e.g. Samsung Health) put a short
+ * metadata line above the real header, so skip leading rows narrower than the typical row.
+ */
+export function detectHeaderRow(rows) {
+  const sample = rows.slice(0, 60);
+  const counts = new Map();
+  for (const r of sample) counts.set(r.length, (counts.get(r.length) || 0) + 1);
+  const typical = [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0];
+  const i = rows.findIndex((r) => r.length >= typical);
+  return i >= 0 && i < 10 ? i : 0;
+}
+
+/** Readable column name: "com.samsung.health.heart_rate.heart_rate" → "heart_rate". */
+export function cleanHeader(h) {
+  const s = String(h || '').trim();
+  return /^[a-z0-9_]+(\.[a-z0-9_]+){2,}$/i.test(s) ? s.slice(s.lastIndexOf('.') + 1) : s;
+}
+
 export const DATE_FORMATS = [
   { key: 'iso', label: 'YYYY-MM-DD (ISO, also with time)' },
   { key: 'dmy', label: 'DD/MM/YYYY' },
   { key: 'mdy', label: 'MM/DD/YYYY' },
+  { key: 'epoch', label: 'Unix timestamp (seconds or milliseconds)' },
 ];
 
 const pad = (n) => String(n).padStart(2, '0');
 
-/** Converts a date string in the given format to YYYY-MM-DD, or null. Any time part is ignored. */
-export function parseDate(s, format = 'iso') {
-  if (!s) return null;
+/**
+ * Converts a date string in the given format to YYYY-MM-DD, or null.
+ * With utc=true, a value that includes a time is read as UTC and converted to this device's
+ * local date (Samsung Health stores times in UTC). Otherwise any time part is ignored.
+ */
+export function parseDate(s, format = 'iso', utc = false) {
+  if (s === null || s === undefined || s === '') return null;
   s = String(s).trim();
   let y, m, d;
+  if (format === 'epoch') {
+    if (!/^\d{9,13}$/.test(s)) return null;
+    const ms = s.length > 11 ? Number(s) : Number(s) * 1000;
+    const dt = new Date(ms);
+    // Day-level timestamps (exact UTC midnight) are calendar days, not instants.
+    const midnight = dt.getUTCHours() === 0 && dt.getUTCMinutes() === 0 && dt.getUTCSeconds() === 0;
+    return (utc && !midnight)
+      ? `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`
+      : `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
+  }
   if (format === 'iso') {
+    const withTime = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (utc && withTime) {
+      const [, Y, M, D, h, mi, sec] = withTime.map(Number);
+      const dt = new Date(Date.UTC(Y, M - 1, D, h, mi, sec || 0));
+      const iso = `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+      return isValidISODate(iso) ? iso : null;
+    }
     const mt = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
     if (!mt) return null;
     [, y, m, d] = mt;
@@ -65,6 +106,7 @@ export function parseDate(s, format = 'iso') {
 /** Guesses the date format from sample values. */
 export function guessDateFormat(samples) {
   const vals = samples.filter(Boolean);
+  if (vals.length && vals.every((v) => /^\d{9,13}$/.test(String(v).trim()))) return 'epoch';
   if (vals.length && vals.every((v) => parseDate(v, 'iso'))) return 'iso';
   // If any first component is > 12, it must be the day.
   for (const v of vals) {
@@ -87,14 +129,28 @@ export function guessColumn(headers, patterns) {
 
 /** For agg 'auto': counts and totals are summed per day, everything else is averaged. */
 export function autoAgg(metric) {
-  return /step|calor|kcal|energy|distance|floor|minute|active|duration|count/i.test(metric) ? 'sum' : 'mean';
+  if (/score|rate|avg|mean|pct|percent|weight|temp|spo2|pressure|systolic|diastolic/i.test(metric)) return 'mean';
+  return /step|calor|kcal|distance|floor|minute|active|duration|count/i.test(metric) ? 'sum' : 'mean';
+}
+
+/** Columns that are ids, versions or bookkeeping, not measurements — not ticked by default. */
+export function isBookkeepingColumn(name) {
+  return /(^|_)(id|uuid|ver|version|offset|pkg|pkg_name|type|source|comment|tag|binning|deviceuuid|custom)$|_time$|^time$|uuid|create_sh_ver|modify_sh_ver/i
+    .test(cleanHeader(name));
 }
 
 /**
  * Applies a mapping to data rows (header excluded).
- * mapping: { format: 'long'|'wide', dateCol, metricCol, valueCol, valueCols, dateFormat, agg: 'auto'|'mean'|'sum'|'last' }
+ * mapping: { format: 'long'|'wide', dateCol, metricCol, valueCol, valueCols, names, dateFormat, utc,
+ *            agg: 'auto'|'mean'|'sum'|'last' }
+ * names (wide only, optional): { [columnIndex]: metric name to save as } — defaults to the cleaned header.
  * Returns { records: [{metric, date, value}], skipped, total }.
  */
+export function metricNameFor(headers, mapping, c) {
+  const n = mapping.names && mapping.names[c];
+  return (n && String(n).trim()) || cleanHeader(headers[c]) || `Column ${c + 1}`;
+}
+
 export function applyMapping(headers, rows, mapping) {
   const buckets = new Map(); // "metric|date" -> values[]
   let skipped = 0, total = 0;
@@ -104,7 +160,7 @@ export function applyMapping(headers, rows, mapping) {
     buckets.get(k).push(value);
   };
   for (const r of rows) {
-    const date = parseDate(r[mapping.dateCol], mapping.dateFormat);
+    const date = parseDate(r[mapping.dateCol], mapping.dateFormat, Boolean(mapping.utc));
     if (mapping.format === 'long') {
       total++;
       const metric = (r[mapping.metricCol] || '').trim();
@@ -118,7 +174,7 @@ export function applyMapping(headers, rows, mapping) {
         total++;
         const value = toNum(raw);
         if (!date || value === null) { skipped++; continue; }
-        add(headers[c].trim(), date, value);
+        add(metricNameFor(headers, mapping, c), date, value);
       }
     }
   }

@@ -36,6 +36,14 @@ export function generateDemo() {
     }
   }
 
+  // Make two of the latest results out of range so the flags are visible in the demo.
+  const latestDate = addDays(today, -10);
+  for (const l of labs) {
+    if (l.date !== latestDate) continue;
+    if (l.test === 'LDL cholesterol') l.value = 3.4;
+    if (l.test === 'Vitamin D') l.value = 41;
+  }
+
   const metrics = [];
   for (let d = 400; d >= 1; d--) {
     const date = addDays(today, -d);

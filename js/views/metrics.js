@@ -1,6 +1,6 @@
 // Wearable metrics: per-metric charts and the CSV importer with reusable column mappings.
 // Routes: #/metrics · #/metrics/import
-import { getAll, putMany, removeByIndex, getSetting, setSetting } from '../db.js';
+import { getAll, getAllByIndex, putMany, removeMany, removeByIndex, getSetting, setSetting } from '../db.js';
 import { lineChart, dataTable } from '../chart.js';
 import { parseCSV, parseDate, DATE_FORMATS, guessDateFormat, headerSignature, guessColumn, applyMapping } from '../csv.js';
 import {
@@ -25,6 +25,18 @@ export async function toggleOverviewKey(key) {
   if (keys.has(key)) keys.delete(key); else keys.add(key);
   await setSetting('overviewKeys', [...keys]);
   return keys.has(key);
+}
+
+/** Moves all values of one metric to another name (merging if it exists). Returns the count moved. */
+async function renameMetric(from, to) {
+  const rows = await getAllByIndex('metrics', 'metric', from);
+  await putMany('metrics', rows.map((r) => ({ ...r, id: `${to}|${r.date}`, metric: to })));
+  await removeMany('metrics', rows.map((r) => r.id));
+  const keys = await getSetting('overviewKeys', []);
+  if (keys.includes(`metric:${from}`)) {
+    await setSetting('overviewKeys', [...new Set(keys.map((k) => (k === `metric:${from}` ? `metric:${to}` : k)))]);
+  }
+  return rows.length;
 }
 
 async function renderList(el) {
@@ -59,7 +71,11 @@ async function renderList(el) {
         <p class="muted">Latest ${fmtNum(last.value)} on ${fmtDate(last.date)} · average in range ${fmtNum(avg)} · ${pts.length} day${pts.length === 1 ? '' : 's'}</p>
         <div data-chart data-metric="${esc(metric)}"></div>
         ${dataTable(pts)}
-        <button class="btn btn-sm btn-danger" style="margin-top:.5rem" data-del="${esc(metric)}">Delete all ${esc(prettyName(metric))} data</button>
+        <p class="hint">Stored as “${esc(metric)}”</p>
+        <div class="row" style="margin-top:.5rem">
+          <button class="btn btn-sm" data-rename="${esc(metric)}">Rename / merge</button>
+          <button class="btn btn-sm btn-danger" data-del="${esc(metric)}">Delete all data</button>
+        </div>
       </section>`;
     }).join('')}`;
 
@@ -77,6 +93,16 @@ async function renderList(el) {
     const on = await toggleOverviewKey(b.dataset.star);
     b.setAttribute('aria-pressed', on);
     b.textContent = on ? '★ On overview' : '☆ Overview';
+  }));
+  el.querySelectorAll('[data-rename]').forEach((b) => b.addEventListener('click', async () => {
+    const from = b.dataset.rename;
+    const others = groups.map(([k]) => k).filter((k) => k !== from);
+    const to = (prompt(`Rename “${from}” to:\n(Use an existing name to merge — e.g. ${others.slice(0, 3).join(', ') || 'steps'}. Values on the same day are replaced.)`, from) || '').trim();
+    if (!to || to === from) return;
+    const n = await renameMetric(from, to);
+    toast(`Moved ${n} values to “${to}”`);
+    await renderList(el);
+    afterMount(el);
   }));
   el.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
     const metric = b.dataset.del;
@@ -157,6 +183,7 @@ async function renderImport(el) {
       </fieldset>
       <div class="field"><label for="m-agg">If a metric has several values on one day</label>
         <select id="m-agg" name="agg">
+          <option value="auto"${m.agg === 'auto' ? ' selected' : ''}>Automatic: add up steps, calories, distance, minutes; average the rest</option>
           <option value="mean"${m.agg === 'mean' ? ' selected' : ''}>Average them (heart rate, HRV)</option>
           <option value="sum"${m.agg === 'sum' ? ' selected' : ''}>Add them up (steps, minutes)</option>
           <option value="last"${m.agg === 'last' ? ' selected' : ''}>Keep the last one</option>
@@ -241,7 +268,7 @@ function guessMapping(headers, rows) {
     metricCol: metricCol ?? 0,
     valueCol: valueCol ?? Math.min(1, headers.length - 1),
     valueCols: isLong ? [] : headers.map((_, i) => i).filter((i) => i !== dateCol && rows.slice(0, 20).some((r) => r[i] && !Number.isNaN(Number(String(r[i]).replace(',', '.'))))),
-    agg: 'mean',
+    agg: 'auto',
   };
 }
 

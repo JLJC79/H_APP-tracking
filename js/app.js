@@ -40,6 +40,7 @@ export async function render() {
     await r.view.render(container, params);
     if (seq !== renderSeq) return; // a newer navigation won
     main.replaceChildren(container);
+    window.scrollTo(0, 0);
     if (r.view.afterMount) await r.view.afterMount(container, params);
   } catch (err) {
     console.error(err);

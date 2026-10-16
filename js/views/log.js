@@ -55,6 +55,12 @@ async function renderEntry(el) {
   if (!day) day = todayISO();
   const fields = await activeFields();
   const entries = new Map((await getAllByIndex('logEntries', 'date', day)).map((e) => [e.fieldId, e.value]));
+  // Most recent earlier value per number field: the stepper starts from it when today is empty.
+  const prev = new Map();
+  for (const f of fields.filter((x) => x.type === 'number')) {
+    const before = (await getAllByIndex('logEntries', 'fieldId', f.id)).filter((e) => e.date < day).sort(byDate);
+    if (before.length) prev.set(f.id, before[before.length - 1].value);
+  }
 
   if (!fields.length) {
     el.innerHTML = `${subnav('entry')}<div class="card empty-state">
@@ -78,7 +84,7 @@ async function renderEntry(el) {
       <button class="btn" id="next" aria-label="Next day" ${isToday ? 'disabled' : ''}>›</button>
     </div>
     <p class="muted" style="text-align:center;margin:.25rem 0 .75rem">${isToday ? 'Today' : fmtDate(day)} · changes save automatically</p>
-    ${fields.map((f) => fieldControl(f, entries.get(f.id))).join('')}`;
+    ${fields.map((f) => fieldControl(f, entries.get(f.id), prev.get(f.id))).join('')}`;
 
   const go = (d) => { location.hash = `#/log/${d}`; };
   el.querySelector('#prev').addEventListener('click', () => go(addDays(day, -1)));
@@ -88,7 +94,7 @@ async function renderEntry(el) {
   for (const f of fields) bindField(el.querySelector(`[data-field="${f.id}"]`), f);
 }
 
-function fieldControl(f, value) {
+function fieldControl(f, value, prevValue) {
   const label = `<div class="qe-label"><span id="lbl-${f.id}">${esc(f.name)}${f.unit ? ` <small>(${esc(f.unit)})</small>` : ''}</span><span class="qe-saved" aria-live="polite"></span></div>`;
   let control = '';
   if (f.type === 'scale') {
@@ -101,7 +107,7 @@ function fieldControl(f, value) {
   } else if (f.type === 'number') {
     control = `<div class="stepper">
       <button type="button" data-step="-1" aria-label="Decrease ${esc(f.name)}">−</button>
-      <input type="text" inputmode="decimal" aria-labelledby="lbl-${f.id}" value="${value ?? ''}" placeholder="–">
+      <input type="text" inputmode="decimal" aria-labelledby="lbl-${f.id}" value="${value ?? ''}" placeholder="${prevValue !== undefined ? 'last ' + prevValue : '–'}" data-prev="${prevValue ?? ''}">
       <button type="button" data-step="1" aria-label="Increase ${esc(f.name)}">+</button></div>
       ${value !== undefined ? '<button type="button" class="btn btn-sm btn-ghost clear-btn" data-clear>Clear</button>' : ''}`;
   } else {
@@ -148,7 +154,8 @@ function bindField(box, f) {
     box.querySelectorAll('[data-step]').forEach((b) => b.addEventListener('click', () => {
       const step = Number(f.step) || 1;
       const cur = toNum(input.value);
-      const next = cur === null ? 0 : cur + step * Number(b.dataset.step);
+      const base = cur ?? toNum(input.dataset.prev);
+      const next = base === null ? 0 : cur === null ? base : base + step * Number(b.dataset.step);
       input.value = String(Math.round(next * 1000) / 1000);
       commit();
     }));

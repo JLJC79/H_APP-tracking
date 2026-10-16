@@ -43,7 +43,7 @@ export function fmtDate(iso, { year = true } = {}) {
   const d = parseISO(iso);
   return `${d.getDate()} ${MONTHS[d.getMonth()]}${year ? ' ' + d.getFullYear() : ''}`;
 }
-export function fmtMonth(d) { return `${MONTHS[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`; }
+export function fmtMonth(d) { return `${MONTHS[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`; }
 export function fmtDay(d) { return `${d.getDate()} ${MONTHS[d.getMonth()]}`; }
 
 /** Parses a user-entered number; accepts a comma decimal separator. Returns null if blank/invalid. */
@@ -159,8 +159,19 @@ export function readFileText(file) {
   });
 }
 
-/** Pretty label for a metric key like "resting_hr" → "Resting hr". */
+const ACRONYMS = new Set(['hr', 'hrv', 'spo2', 'bmi', 'vo2', 'vo2max', 'bp', 'rhr']);
+const UNIT_WORDS = new Set(['ms', 'bpm', 'kg', 'lb', 'km', 'kcal', 'min', 'mins', 'pct', '%']);
+/** Pretty label for a metric key: "resting_hr" → "Resting HR", "hrv_ms" → "HRV (ms)". */
 export function prettyName(s) {
-  const t = String(s).replace(/[_]+/g, ' ').trim();
+  const words = String(s).replace(/[_]+/g, ' ').trim().split(/\s+/);
+  if (words.length > 1 && /[a-z]/.test(words[0]) && words[0] !== words[0].toLowerCase()) return words.join(' '); // already human-written
+  const out = words.map((w) => {
+    const lw = w.toLowerCase();
+    if (ACRONYMS.has(lw)) return lw.toUpperCase();
+    return w;
+  });
+  const last = words[words.length - 1].toLowerCase();
+  if (words.length > 1 && UNIT_WORDS.has(last)) out[out.length - 1] = `(${last})`;
+  const t = out.join(' ');
   return t.charAt(0).toUpperCase() + t.slice(1);
 }

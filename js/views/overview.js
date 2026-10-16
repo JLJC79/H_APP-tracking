@@ -87,8 +87,8 @@ export async function render(el) {
     </section>
 
     <section>
-      <div class="card-head"><h2>Key metrics</h2>
-        <small class="muted">${starred.length ? 'Starred metrics' : 'Star metrics on Wearables or Log history to choose'}</small></div>
+      <h2>Key metrics</h2>
+      <p class="muted"><small>${starred.length ? 'Your starred metrics.' : 'Showing all. Tap ☆ on Wearables or Log history to choose which appear here.'}</small></p>
       ${chosen.length ? `<div class="tiles">${tiles}</div>` : '<div class="card empty-state">No metrics yet.</div>'}
     </section>`;
 

@@ -85,9 +85,14 @@ export function guessColumn(headers, patterns) {
   return i >= 0 ? i : null;
 }
 
+/** For agg 'auto': counts and totals are summed per day, everything else is averaged. */
+export function autoAgg(metric) {
+  return /step|calor|kcal|energy|distance|floor|minute|active|duration|count/i.test(metric) ? 'sum' : 'mean';
+}
+
 /**
  * Applies a mapping to data rows (header excluded).
- * mapping: { format: 'long'|'wide', dateCol, metricCol, valueCol, valueCols, dateFormat, agg: 'mean'|'sum'|'last' }
+ * mapping: { format: 'long'|'wide', dateCol, metricCol, valueCol, valueCols, dateFormat, agg: 'auto'|'mean'|'sum'|'last' }
  * Returns { records: [{metric, date, value}], skipped, total }.
  */
 export function applyMapping(headers, rows, mapping) {
@@ -120,9 +125,10 @@ export function applyMapping(headers, rows, mapping) {
   const records = [];
   for (const [k, vals] of buckets) {
     const [metric, date] = [k.slice(0, k.lastIndexOf('|')), k.slice(k.lastIndexOf('|') + 1)];
+    const agg = mapping.agg === 'auto' ? autoAgg(metric) : mapping.agg;
     let value;
-    if (mapping.agg === 'sum') value = vals.reduce((a, b) => a + b, 0);
-    else if (mapping.agg === 'last') value = vals[vals.length - 1];
+    if (agg === 'sum') value = vals.reduce((a, b) => a + b, 0);
+    else if (agg === 'last') value = vals[vals.length - 1];
     else value = vals.reduce((a, b) => a + b, 0) / vals.length;
     records.push({ metric, date, value: Math.round(value * 1000) / 1000 });
   }
